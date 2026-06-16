@@ -1,0 +1,75 @@
+#include <stdio.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <esp_log.h>
+
+// Bibliotecas para o Display Oled
+#include "ssd1306.h"
+#include "driver/i2c.h"
+
+// Variável do display
+SSD1306_t device;
+
+// Variável Stream Buffer
+StreamBufferHandle_t buffer
+
+// Inicializa o display OLED via I2C
+void display_init(void) 
+{
+    i2c_master_init(&device, CONFIG_SDA_GPIO, CONFIG_SCL_GPIO, CONFIG_RESET_GPIO);
+
+	ssd1306_init(&device, 128, 64);
+
+    ssd1306_clear_screen(&device, false);
+	ssd1306_contrast(&device, 0xff);
+}
+
+// Função para gerar dados e testar o display
+void coleta(void *pvParameters)
+{
+    float dados = 0;
+    ESP_LOGI("Coleta","Init...");
+    while(1)
+    {
+      dados = 127; // 127 V   
+      xStreamBufferSend(buffer, *dados, sizeof(dados), 0);
+
+      vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+
+}
+
+// Task para exibir informações no display
+void display(void *pvParameters)
+{
+    float dados=0;
+    ESP_LOGI("Oled","Init...");
+    while(1)
+    {
+        // Recebe os dados do buffer
+        xStreamBufferReceive(buffer, *dados, sizeof(dados), portMAX_DELAY);
+        // Limpa o display
+        ssd1306_clear_screen(&device, false);
+        // printa o valor de 'dados'
+        ssd1306_display_text(&devide, 0, dados, sizeof(dados), false);
+
+    }
+
+}
+
+
+
+// Precisa tertar !!!!
+void app_main(void)
+{
+    vTaskPrioritySet(NULL, 5);
+
+    // Criação Stream Buffer
+    // 1 float = 32bits = 4Bytes
+    buffer = xStreamBufferCreate(4,1);
+
+    // Criação das tasks
+    TaskCreate(diplay, "oled", 4096, NULL, 2, NULL);
+    TaskCreate(coleta, "dados", 4096, NULL, 2, NULL);
+}
