@@ -36,7 +36,7 @@ void coleta(void *pvParameters)
       dados = 127; // 127 V   
       xStreamBufferSend(buffer, &dados, sizeof(dados), 0);
 
-      vTaskDelay(pdMS_TO_TICKS(10000));
+      vTaskDelay(pdMS_TO_TICKS(5000));
     }
 
 }
@@ -44,21 +44,27 @@ void coleta(void *pvParameters)
 // Task para exibir informações no display
 void display(void *pvParameters)
 {
+    // Display max 17 char, sem char especial
     float dados;
-    const char str[10];
+    char str[7];
     ESP_LOGI("Oled","Init...");
     while(1)
     {
+        char form[20] = "TensaoRMS:"; // Precisa ser reatualuizado a cada volta do loop
         // Recebe os dados do buffer
         xStreamBufferReceive(buffer, &dados, sizeof(dados), portMAX_DELAY);
+        ESP_LOGI("Oled", "printing");
         // Limpa o display
         ssd1306_clear_screen(&device, false);
-        // printa o valor de 'dados'
+        // Converte o valor de 'dados' para uma string 'str'
         snprintf(str, sizeof(str), "%.2f", dados);
-        ssd1306_display_text(&device, 0, "teste", 5, false);
+        // Concatena 'str' com uma string de formatação 'form'
+        strcat(form, str);      
+        // printa o valor de 'form' + 'dados'  
+        ssd1306_display_text(&device, 0, form, sizeof(form), false);
 
     }
-
+    
 }
 
 
@@ -68,8 +74,6 @@ void app_main(void)
 {
     vTaskPrioritySet(NULL, 5);
 
-
-
     // Criação Stream Buffer
     // 1 float = 32bits = 4Bytes
     buffer = xStreamBufferCreate(4,1);
@@ -77,4 +81,7 @@ void app_main(void)
     // Criação das tasks
     xTaskCreate(display, "oled", 4096, NULL, 2, NULL);
     xTaskCreate(coleta, "dados", 4096, NULL, 2, NULL);
+
+    // Inicialização do display
+    display_init();
 }
