@@ -94,19 +94,6 @@ static void continuous_adc_init(adc_channel_t *channel, uint8_t channel_num, adc
 void vtaskADC(void *pvparameters)
 {
     ESP_LOGI("ADC", "Task Inicializando!");
-    adc_cali_handle_t cali_handle = NULL; // criei o espaço onde terá as configurações da calibração
-    adc_cali_line_fitting_config_t cali_config = {
-        .unit_id = EXAMPLE_ADC_UNIT,
-        .atten = EXAMPLE_ADC_ATTEN,
-        .bitwidth = EXAMPLE_ADC_BIT_WIDTH,
-    };
-    esp_err_t  ret_cali = adc_cali_create_scheme_line_fitting(&cali_config, &cali_handle);
-
-    //if (ret_cali == ESP_OK) {
-    //    ESP_LOGI(TAG, "Calibração criada com sucesso");
-    //} else {
-    //    ESP_LOGW(TAG, "Calibração não disponível: %s", esp_err_to_name(ret_cali));
-    //}
 
     esp_err_t ret;
     uint32_t ret_num = 0;
@@ -191,20 +178,17 @@ void vtaskProcessamento(void *pvparameters)
         .atten = EXAMPLE_ADC_ATTEN,
         .bitwidth = EXAMPLE_ADC_BIT_WIDTH,
     };
+    adc_cali_create_scheme_line_fitting(&cali_config, &cali_handle);
 
-    esp_err_t  ret_cali = adc_cali_create_scheme_line_fitting(&cali_config, &cali_handle);
-
+    uint32_t raw = 0;
     int tensao_mv = 0;
     while (1)
     {
         uint32_t total = 0;
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-        // drena tudo que está no stream buffer
-        while (xStreamBufferReceive(buffer, &tensao_mv, sizeof(tensao_mv), 0) == sizeof(tensao_mv))
+        while (xStreamBufferReceive(buffer, &raw, sizeof(raw), 0) == sizeof(raw))
         {
-            //adc_cali_raw_to_voltage(cali_handle, parsed_data[i].raw_data, &tensao_mv);
-
+            adc_cali_raw_to_voltage(cali_handle, raw, &tensao_mv);
             printf("%d\n", tensao_mv);
             total++;
         }
