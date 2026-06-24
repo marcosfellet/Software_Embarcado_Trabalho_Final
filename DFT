@@ -1,0 +1,72 @@
+#include <stdio.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <esp_log.h>
+#include <freertos/semphr.h>
+#include <math.h>
+
+int sinal[] = {1, 0, 0, 1};
+
+// sizeof(sinal) -> retona o número de bytes
+int len = sizeof(sinal)/sizeof(sinal[0]);
+
+// Matriz DFT com N=4 (fixa)
+int wr[4][4] = {{1,1,1,1}, {1,0,-1,0}, {1,-1,1,-1}, {1,0,-1,0}};    //Parte real da DFT
+int wi[4][4] = {{0,0,0,0}, {0,-1,0,1}, {0,0,0,0}, {0,1,0,-1}};      //Parte imag da DFT
+
+// Função multiplicação Matrix * Vetor
+void mult(int a[len][len], int b[len], int* vec)
+{
+    int aux;
+    // Multiplicação Matrix * Vetor
+        for(int k=0; k < len; k++)
+        {
+            aux = 0;
+            for(int n=0; n < len; n++)
+            {
+                aux = aux + a[k][n] * b[n];
+            }
+            vec[k] = aux;
+        }
+    return;
+}
+
+void mat (void *pvParameters)
+{
+
+    int yr[len];
+    int yi[len];
+    int aux = 0;
+    ESP_LOGI("MAT", "init...");
+    while(1)
+    {
+        mult(wr, sinal, yr);
+        mult(wi, sinal, yi);
+
+        // Printa vetor
+        for(int k=0; k < len; k++)
+        {
+            printf("y = %d+(%dj)\n", yr[k], yi[k]);
+
+        }
+
+        printf("Módulo = {");
+        for(int k=0; k < len; k++)
+        {
+            aux = sqrt(pow(yr[k],2) + pow(yi[k],2));
+            printf(" %d ", aux);
+
+        }
+        printf("} \n");
+
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+
+void app_main(void)
+{
+    vTaskPrioritySet(NULL, 5);
+    //xTaskCreate(dft, "dft_M", 4096, NULL, 2, NULL);
+    xTaskCreate(mat, "Matriz", 4096, NULL, 2, NULL);
+}
