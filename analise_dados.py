@@ -57,7 +57,7 @@ scat_blackout = ax1.plot([], [], marker='x', color='red', linestyle='None',
 scat_surtos = ax1.plot([], [], marker='o', color='darkslategrey', linestyle='None', 
                        markersize=6, zorder=3, label='Evento: Surto')[0]
 
-ax1.set_title("Monitoramento da Rede (Leitura de Estrutura de Bytes C)")
+ax1.set_title( "Monitoramento da Rede")
 ax1.set_ylabel("Tensão (V)")
 ax2.set_ylabel("Corrente (A)")
 ax2.set_xlabel("Tempo de Medição (segundos)")
