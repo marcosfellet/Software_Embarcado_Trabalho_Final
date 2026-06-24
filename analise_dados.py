@@ -40,10 +40,10 @@ surtos_events = deque()
 
 # Configuração visual
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-line1, = ax1.plot([], [], 'b-', lw=1.5)
+line1, = ax1.plot([], [], 'turquoise', lw=1.5)
 line2, = ax2.plot([], [], 'r-', lw=1.5)
-scat_blackout = ax1.plot([], [], 'kx', markersize=10, zorder=3)[0]
-scat_surtos = ax1.plot([], [], 'o', color='orange', markersize=8, zorder=3)[0]
+scat_blackout = ax1.plot([], [], 'kx', color= 'red', markersize=10, zorder=3)[0]
+scat_surtos = ax1.plot([], [], 'o', color='darkslategrey', markersize=8, zorder=3)[0]
 
 ax1.set_title("Monitoramento da Rede (Tempo Relativo)")
 ax1.set_ylabel("Tensão (V)")
