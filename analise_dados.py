@@ -14,11 +14,15 @@ JANELA_SEGUNDOS = 5.0
 
 # --- MAPEAMENTO DO PROTOCOLO ---
 CABECALHO = b'SG'
-FORMATO_PAYLOAD = "<ffbb" # Apenas os dados sem o cabeçalho
+FORMATO_PAYLOAD = "<ffbb" # Mantido igual para não quebrar a recepção do ESP32 (v, i, b, s)
 TAMANHO_PAYLOAD = struct.calcsize(FORMATO_PAYLOAD) # 10 bytes
 TAMANHO_PACOTE_TOTAL = len(CABECALHO) + TAMANHO_PAYLOAD # 12 bytes
 
+
 def encontrar_porta_esp32():
+    '''
+    Função para detectar e selecionar a porta utilizada pelo ESP32
+    '''
     for p in serial.tools.list_ports.comports():
         if "USB" in p.description or "CP210" in p.description:
             return p.device
@@ -35,21 +39,23 @@ if not SIMULACAO:
 # --- CONTROLE DE TEMPO E MEMÓRIA ---
 tempo_inicio = None 
 
-# Novo: Um buffer global para acumular bytes bagunçados antes de decodificar
+# Um buffer global para acumular bytes bagunçados antes de decodificar
 serial_buffer = bytearray()
 
+# Criação de deques para armazenar os valores pontos que aparecerão no gráfico
 tempo_data = deque()
 tensao_data = deque()
-corrente_data = deque()
 
 blackout_events = deque() 
 surtos_events = deque()
 
-# Configuração visual do Matplotlib
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+#########################################################################################
+########################## Configuração visual do Matplotlib ############################ 
+#########################################################################################
+
+fig, ax1 = plt.subplots(figsize=(10, 6))
 
 line1, = ax1.plot([], [], color='turquoise', lw=1.5, label='Tensão Nominal')
-line2, = ax2.plot([], [], 'r-', lw=1.5, label='Corrente Nominal')
 
 scat_blackout = ax1.plot([], [], marker='x', color='red', linestyle='None', 
                          markersize=10, zorder=3, label='Evento: Blackout')[0]
@@ -57,35 +63,35 @@ scat_blackout = ax1.plot([], [], marker='x', color='red', linestyle='None',
 scat_surtos = ax1.plot([], [], marker='o', color='darkslategrey', linestyle='None', 
                        markersize=6, zorder=3, label='Evento: Surto')[0]
 
-ax1.set_title( "Monitoramento da Rede")
+ax1.set_title("Monitoramento da Rede")
 ax1.set_ylabel("Tensão (V)")
-ax2.set_ylabel("Corrente (A)")
-ax2.set_xlabel("Tempo de Medição (segundos)")
+ax1.set_xlabel("Tempo de Medição (segundos)")
 
 ax1.set_ylim(0, 350)
-ax2.set_ylim(0, 100)
-
 ax1.legend(loc='upper left', shadow=False, frameon=True)
-ax2.legend(loc='upper left', shadow=False, frameon=True)
+
 
 def update(_):
+    '''
+    Função que atualiza o gráfico dinâmico com as variáveis recebidas via UART
+    '''
     global tempo_inicio, serial_buffer
     
     dados_novos = False
-    
+
+    # Checa se o usuário deseja fazer uma simulação para ver o comportamento do código ou não
     if SIMULACAO:
         if tempo_inicio is None:
             tempo_inicio = time.time()
             
         tempo_atual = time.time() - tempo_inicio 
         v = random.uniform(210, 230)
-        i = random.uniform(10, 20)
+        # i (corrente) foi removida da simulação interna do gráfico
         b = 1 if random.random() > 0.95 else 0
         s = 1 if random.random() > 0.95 else 0
         
         tempo_data.append(tempo_atual)
         tensao_data.append(v)
-        corrente_data.append(i)
         if b: blackout_events.append((tempo_atual, v))
         if s: surtos_events.append((tempo_atual, v))
         
@@ -98,7 +104,7 @@ def update(_):
             
             # Varre o buffer até processar todos os pacotes válidos que chegarem
             while len(serial_buffer) >= TAMANHO_PACOTE_TOTAL:
-                # Procura a assinatura 'SG' no meio dos textos soltos
+                # Procura a tag 'SG' no meio dos textos soltos
                 idx = serial_buffer.find(CABECALHO)
                 
                 if idx == -1:
@@ -110,20 +116,23 @@ def update(_):
                     break
                     
                 if idx + TAMANHO_PACOTE_TOTAL <= len(serial_buffer):
-                    # Achou 'SG' e tem bytes suficientes! Extrai os 10 bytes seguintes.
+                    # Achou 'SG' e tem bytes suficientes, extrai os 10 bytes seguintes
                     pacote_dados = serial_buffer[idx+2 : idx+12]
                     
                     try:
-                        v, i, b, s = struct.unpack(FORMATO_PAYLOAD, pacote_dados)
-                        
+                        # O unpack dos dados
+                        v, b, s = struct.unpack(FORMATO_PAYLOAD, pacote_dados)
+
                         if tempo_inicio is None:
+                            #Inicia o timer para compor o eixo x do gráfico
                             tempo_inicio = time.time()
                             
                         tempo_atual = time.time() - tempo_inicio 
                         
                         tempo_data.append(tempo_atual)
                         tensao_data.append(v)
-                        corrente_data.append(i)
+                        
+                        #Registra coordenadas dos blackouts e surtos
                         if b: blackout_events.append((tempo_atual, v))
                         if s: surtos_events.append((tempo_atual, v))
                         
@@ -146,15 +155,15 @@ def update(_):
         limite_esquerdo = tempo_referencia - JANELA_SEGUNDOS
         
         while tempo_data and tempo_data[0] < limite_esquerdo:
+            # Obtém e remove o elemento do deque 
             tempo_data.popleft()
             tensao_data.popleft()
-            corrente_data.popleft()
             
         while blackout_events and blackout_events[0][0] < limite_esquerdo: blackout_events.popleft()
         while surtos_events and surtos_events[0][0] < limite_esquerdo: surtos_events.popleft()
 
+        # Adiciona o ponto ao gráfico
         line1.set_data(tempo_data, tensao_data)
-        line2.set_data(tempo_data, corrente_data)
         
         if blackout_events:
             tempos, valores = zip(*blackout_events)
@@ -170,12 +179,10 @@ def update(_):
 
         if tempo_referencia < JANELA_SEGUNDOS:
             ax1.set_xlim(0, JANELA_SEGUNDOS)
-            ax2.set_xlim(0, JANELA_SEGUNDOS)
         else:
             ax1.set_xlim(limite_esquerdo, tempo_referencia)
-            ax2.set_xlim(limite_esquerdo, tempo_referencia)
 
-    return line1, line2, scat_blackout, scat_surtos
+    return line1, scat_blackout, scat_surtos
 
 ani = FuncAnimation(fig, update, interval=30, blit=False)
 plt.tight_layout()
