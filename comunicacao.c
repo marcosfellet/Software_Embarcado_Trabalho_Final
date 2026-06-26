@@ -5,7 +5,8 @@
 #define PORTA UART_NUM_0
 
 // Garante que a estrutura terá exatamente o tamanho dos dados
-typedef struct __attribute__((packed)) {
+typedef struct __attribute__((packed)) 
+{
     char header[2]; // Sempre conterá os caracteres 'S' e 'G' (Sinal Gráfico)
     float tensao;
     float corrente;
