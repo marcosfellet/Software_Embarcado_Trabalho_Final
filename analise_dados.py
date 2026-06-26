@@ -62,7 +62,7 @@ ax1.set_ylabel("Tensão (V)")
 ax2.set_ylabel("Corrente (A)")
 ax2.set_xlabel("Tempo de Medição (segundos)")
 
-ax1.set_ylim(100, 300)
+ax1.set_ylim(0, 350)
 ax2.set_ylim(0, 100)
 
 ax1.legend(loc='upper left', shadow=False, frameon=True)
