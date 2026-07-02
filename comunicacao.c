@@ -17,7 +17,7 @@ void uart_init()
 {
     // 1. Configuração dos parâmetros de comunicação
     uart_config_t uart_config = {
-        .baud_rate = 115200,                  // Velocidade sincronizada com o Python
+        .baud_rate = 460800,                  // Velocidade sincronizada com o Python
         .data_bits = UART_DATA_8_BITS,        // Tamanho do pacote de dados enviado
         .parity = UART_PARITY_DISABLE,        // Sem bit de paridade
         .stop_bits = UART_STOP_BITS_1,        // 1 bit de parada
