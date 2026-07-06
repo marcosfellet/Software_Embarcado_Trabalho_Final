@@ -20,6 +20,7 @@ TAMANHO_PAYLOAD = struct.calcsize(FORMATO_PAYLOAD) # 6 bytes
 TAMANHO_PACOTE_TOTAL = len(CABECALHO) + TAMANHO_PAYLOAD # 8 bytes
 
 
+
 def encontrar_porta_esp32():
     '''
     Função para detectar e selecionar a porta utilizada pelo ESP32
@@ -42,7 +43,7 @@ tempo_inicio = None
 
 # Um buffer global para acumular bytes bagunçados antes de decodificar
 serial_buffer = bytearray()
-
+contador_de_eventos = 0
 # Criação de deques para armazenar os valores pontos que aparecerão no gráfico
 tempo_data = deque()
 tensao_data = deque()
@@ -72,7 +73,7 @@ def update(_):
     '''
     Função que atualiza o gráfico dinâmico com as variáveis recebidas via UART
     '''
-    global tempo_inicio, serial_buffer
+    global contador_de_eventos, serial_buffer, tempo_inicio
     
     dados_novos = False
 
@@ -113,22 +114,17 @@ def update(_):
                 if idx + TAMANHO_PACOTE_TOTAL <= len(serial_buffer):
                     # Achou 'SG' e tem bytes suficientes, extrai os 6 bytes seguintes do payload
                     pacote_dados = serial_buffer[idx+2 : idx+8]
-                    
                     try:
                         # O unpack dos dados (desempacota o 's' para limpar o buffer, mas não usa no gráfico)
                         v, b, s = struct.unpack(FORMATO_PAYLOAD, pacote_dados)
-
-                        if tempo_inicio is None:
-                            # Inicia o timer para compor o eixo x do gráfico
-                            tempo_inicio = time.time()
                             
-                        tempo_atual = time.time() - tempo_inicio 
+                        contador_de_eventos += 1
                         
-                        tempo_data.append(tempo_atual)
+                        tempo_data.append(contador_de_eventos)
                         tensao_data.append(v)
                         
                         # Registra coordenadas dos blackouts
-                        if b: blackout_events.append((tempo_atual, v))
+                        if b: blackout_events.append((contador_de_eventos, v))
                         
                         dados_novos = True
                     except struct.error:
@@ -144,9 +140,6 @@ def update(_):
 
     # Se novos dados entraram nas filas (seja da simulação ou real), atualiza a tela
     if dados_novos:
-        # A referência de tempo passa a ser o último dado que entrou na fila
-        tempo_referencia = tempo_data[-1]
-        limite_esquerdo = tempo_referencia - JANELA_SEGUNDOS
         
         while tempo_data and tempo_data[0] < limite_esquerdo:
             # Obtém e remove o elemento do deque 
@@ -156,7 +149,7 @@ def update(_):
         while blackout_events and blackout_events[0][0] < limite_esquerdo: blackout_events.popleft()
 
         # Adiciona o ponto ao gráfico
-        line1.set_data(tempo_data, tensao_data)
+        line1.set_data(list(tempo_data), list(tensao_data))
         
         if blackout_events:
             tempos, valores = zip(*blackout_events)
@@ -164,10 +157,6 @@ def update(_):
         else:
             scat_blackout.set_data([], [])
 
-        if tempo_referencia < JANELA_SEGUNDOS:
-            ax1.set_xlim(0, JANELA_SEGUNDOS)
-        else:
-            ax1.set_xlim(limite_esquerdo, tempo_referencia)
 
     return line1, scat_blackout
 
