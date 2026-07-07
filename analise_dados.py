@@ -8,7 +8,7 @@ import time
 import struct
 
 # --- CONFIGURAÇÕES ---
-SIMULACAO = True
+SIMULACAO = False
 BAUD_RATE = 921600
 JANELA_SEGUNDOS = 5.0 
 
