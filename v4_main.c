@@ -113,7 +113,8 @@ void vtaskProcessamento(void *pv)
 {
     uint8_t raw_frame[EXAMPLE_READ_LEN]; 
     static adc_continuous_data_t parsed_data[EXAMPLE_READ_LEN / SOC_ADC_DIGI_RESULT_BYTES];
-    
+    char blackout = 0;
+	char surto = 0;
     int periodo_senoide[SAMPLES_PER_PERIOD] = {0};
     float valor_real[SAMPLES_PER_PERIOD] = {0};
     int sample_idx = 0;
