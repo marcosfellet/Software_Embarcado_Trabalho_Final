@@ -32,9 +32,8 @@ void uart_init()
     ESP_ERROR_CHECK(uart_set_pin(PORTA, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     // 3. Instalação do Driver
-    // Buffer de TX de 256 bytes é suficiente para pacotes de 12 bytes.
-    // Como o código só envia dados para o Python (não recebe), Buffer RX de 256 e sem fila (NULL)
-    const int uart_buffer_size = 256;
+    // Buffer de TX de 256 bytes é insuficiente para vários pacotes de 12 bytes.
+    const int uart_buffer_size = 2048;
     ESP_ERROR_CHECK(uart_driver_install(PORTA, uart_buffer_size, uart_buffer_size, 0, NULL, 0));
 }
 
