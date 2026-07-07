@@ -166,7 +166,6 @@ void vtaskProcessamento(void *pv)
                             for(int j=0; j < n; j += 4)
                             {
                                 comunicacao_serial(&valor_real[j], &blackout, &surto);
-                                vTaskDelay(pdMS_TO_TICKS(1)); // Delay para possibilitar a UART organizar o pacote para envio dos dados 
                             }
                             
                             xStreamBufferSend(buffer_oled, &vrms, sizeof(vrms), 0);
