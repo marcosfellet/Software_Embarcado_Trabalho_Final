@@ -114,18 +114,18 @@ void vtaskProcessamento(void *pv)
     uint8_t raw_frame[EXAMPLE_READ_LEN]; 
     static adc_continuous_data_t parsed_data[EXAMPLE_READ_LEN / SOC_ADC_DIGI_RESULT_BYTES];
     char blackout = 0;
-	char surto = 0;
+    char surto = 0;
     int periodo_senoide[SAMPLES_PER_PERIOD] = {0};
     float valor_real[SAMPLES_PER_PERIOD] = {0};
     int sample_idx = 0;
-    uint32_t total_periodos_capturados = 0;
 
     float vrms = 0;
     float aux = 0;
     int n = 0;
-    
-    // Inicializamos as variáveis para evitar lixo de memória
-    //char surto = 0;
+
+    static float ultima_amostra = 0.0f;
+    static uint32_t contador_amostras = 0;
+    static float frequencia_estimada = 0.0f;
 
     while (1)
     {
@@ -139,50 +139,47 @@ void vtaskProcessamento(void *pv)
                     if (parsed_data[i].valid) {
                         int tensao_mv = 0;
                         adc_cali_raw_to_voltage(cali_handle, parsed_data[i].raw_data, &tensao_mv);
-                        
+
+                        float amostra_atual = ((tensao_mv / 1000.0f) - 1.497f) / 0.007639f;
+                        contador_amostras++;
+
+                        if (ultima_amostra <= 0.0f && amostra_atual > 0.0f && contador_amostras > 250) {
+                            frequencia_estimada = 20000.0f / (float)contador_amostras;
+                            // SINALIZADOR APAGADO: printf removido para não sujar o buffer binário
+                            contador_amostras = 0;
+                        }
+
+                        ultima_amostra = amostra_atual;
                         periodo_senoide[sample_idx] = tensao_mv;
                         sample_idx++;
 
                         // Capturou 1 período completo (16.67ms)
                         if (sample_idx >= SAMPLES_PER_PERIOD) {
-                            total_periodos_capturados++;
-                            
                             n = sizeof(periodo_senoide)/sizeof(periodo_senoide[0]);
                             aux = 0;
                             
-                            // 1. APENAS CALCULA OS VALORES NO LOOP (SEM ENVIAR PARA A SERIAL)
+                            // 1. Calcula os valores reais e acumula para o RMS
                             for(int j=0; j < n; j++)
                             {
                                 valor_real[j] = ((periodo_senoide[j]/1000.0f) - 1.497f) / 0.007639f;
-                                //comunicacao_serial(&valor_real[j], &blackout, &surto);
                                 aux = aux + pow(valor_real[j], 2);
                             }
                             
-                            // 2. CALCULA O VRMS FINAL DO PERÍODO
+                            // 2. Calcula o RMS apenas para atualizar os flags de alerta do pacote
                             vrms = sqrt(aux / n);
-                            //printf("RMS: %f\n", vrms);
+                            blackout = (vrms < 50.0f) ? 1 : 0;
+                            surto    = (vrms > 245.0f) ? 1 : 0;
+                            
+                            // Envia o RMS para a fila do display local (Oled)
+                            xStreamBufferSend(buffer_oled, &vrms, sizeof(vrms), 0);
 
-                            // 3. ENVIA DADOS SUBAMOSTRADOS PARA O PYTHON DE MODO A RESPEITAR A TAXA DE ATUALIZAÇÃO DO GRÁFICO
+                            // 3. ENVIA OS VALORES INSTANTÂNEOS SUBAMOSTRADOS (5000 Hz) PARA O PYTHON
+                            // Enviamos a cada 4 amostras para não estourar a banda da serial e manter a fluidez
                             for(int j=0; j < n; j += 4)
                             {
                                 comunicacao_serial(&valor_real[j], &blackout, &surto);
                             }
-                            
-                            xStreamBufferSend(buffer_oled, &vrms, sizeof(vrms), 0);
 
-                            // 4. DEFINE AS REGRAS DE EVENTOS (Exemplo básico)
-                            //blackout = (vrms < 50.0f) ? 0 : 1;  // Se RMS menor que 50V, blackout
-                            //surto    = (vrms > 245.0f) ? 1 : 0; // Se RMS maior que 245V, surto
-
-                            // 5. ENVIA PARA A SERIAL APENAS UMA VEZ POR CICLO (Fora do loop!)
-                            // Enviamos o VRMS estável para o Python plotar de forma limpa
-                            
-                            
-                            // ATENÇÃO: Se o Python estiver rodando, comente o printf abaixo 
-                            // para não misturar texto com os bytes do protocolo.
-                            // printf("Val RMS: %f\n", vrms);
-
-                            // Zera o índice para o próximo ciclo
                             sample_idx = 0;
                         }
                     }
@@ -238,7 +235,7 @@ void display(void *pvParameters)
         // printa o valor de 'form2' + 'blackouts'
         ssd1306_display_text(&device, 1, form2, sizeof(form2), false);
 
-        printf("Val RMS: %s, quedas: %s \n", form, form2);
+        printf("%s, %s \n", form, form2);
     }
     
 }
