@@ -1,25 +1,25 @@
 import serial
-import random
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
 import serial.tools.list_ports
 import struct
 
-
+###############################
+####### CONFIGURAÇÕES #########
+###############################
 SIMULACAO = False       
-BAUD_RATE = 921600              
-JANELA_SEGUNDOS = 5.0            
-TAXA_ENVIO = 5000.0 # taxa de envio dos pacotes
+BAUD_RATE = 921600              # Sincronizado com o ESP32
+JANELA_SEGUNDOS = 0.1           # 100ms mostra exatamente ~6 ciclos de 60Hz
+TAXA_ENVIO = 5000.0             # Taxa de envio das amostras do ESP32
 
-############################### 
-##### MAPEAMENTO DO PROTOCOLO #
-############################### 
+# Total de pontos que cabem na tela de 100ms (0.1 * 5000 = 500 pontos)
+PONTOS_TELA = int(JANELA_SEGUNDOS * TAXA_ENVIO) 
 
 TAG = b'SG'
-PACOTE = "<fbb"          # float + 2 bytes (blackout, surto)
-TAMANHO_PACOTE = struct.calcsize(PACOTE)   # 6
-TAMANHO_PACOTE_TOTAL = len(TAG) + TAMANHO_PACOTE  # 8
+PACOTE = "<fbb"          
+TAMANHO_PACOTE = struct.calcsize(PACOTE)   
+TAMANHO_PACOTE_TOTAL = len(TAG) + TAMANHO_PACOTE  
 
 def encontrar_porta_esp32():
     """Retorna o nome da porta onde o ESP32 está conectado."""
@@ -39,123 +39,107 @@ if not SIMULACAO:
 ###############################
 ###### ESTRUTURAS DE DADOS ####
 ###############################
+serial_buffer = bytearray() 
 
-serial_buffer = bytearray() # Acumula bytes da UART
-contador_de_eventos = 0 # Número de pacotes recebidos (usado para tempo)
-
-tempo_data = deque()   # Tempo real (em segundos) de cada ponto
-tensao_data = deque()  # Valores de tensão
-blackout_events = deque() # Eventos de blackout (tempo, tensão)
+# Agora o histórico armazena tuplas contendo (tensao, blackout, surto)
+historico_dados = deque(maxlen=PONTOS_TELA + 200) 
 
 ###############################
 #### CONFIGURAÇÃO DO GRÁFICO ##
 ###############################
-
 fig, ax1 = plt.subplots(figsize=(10, 6))
 
-line1, = ax1.plot([], [], color='turquoise', lw=1.5, label='Tensão Nominal')
-scat_blackout = ax1.plot([], [], marker='x', color='red', linestyle='None',
-                         markersize=10, zorder=3, label='Evento: Blackout')[0]
+# Linha turquesa da senoide
+line1, = ax1.plot([], [], color='turquoise', lw=2, label='Sinal de Tensão AC')
 
-ax1.set_title("Monitoramento da Rede")
+# Marcador 'X' vermelho para os eventos de blackout
+scat_blackout, = ax1.plot([], [], marker='x', color='red', linestyle='None',
+                            markersize=10, zorder=3, label='Evento: Blackout')
+
+ax1.set_title("Monitoramento da Rede - Modo Osciloscópio com Alertas")
 ax1.set_ylabel("Tensão (V)")
-ax1.set_xlabel("Tempo (s)")
-ax1.set_ylim(0, 350)
-ax1.legend(loc='upper left', shadow=False, frameon=True)
+ax1.set_xlabel("Tempo Relativo na Janela (s)")
+ax1.set_ylim(-350, 350)
+ax1.set_xlim(0, JANELA_SEGUNDOS) # Eixo X fixo de 0 a 0.1s
+ax1.grid(True, linestyle=':', alpha=0.5)
+ax1.legend(loc='upper left')
 
 def update(_):
-    """
-    Atualiza o gráfico a cada frame
-    """
-    global contador_de_eventos, serial_buffer
+    global serial_buffer
     dados_novos = False
-
-    if SIMULACAO:
-        v = random.uniform(210, 230)
-        b = 1 if random.random() > 0.95 else 0
-
-        contador_de_eventos += 1
-        # Calcula o tempo real a partir da contagem de pacotes
-        tempo_real = contador_de_eventos / TAXA_ENVIO
-
-        tempo_data.append(tempo_real)
-        tensao_data.append(v)
-        if b:
-            blackout_events.append((tempo_real, v))
-        dados_novos = True
 
     ###############################################
     ############ LEITURA REAL DA UART #############
     ###############################################
+    if ser and ser.in_waiting > 0:
+        serial_buffer.extend(ser.read(ser.in_waiting))
 
-    else:
-        if ser and ser.in_waiting > 0:
-            serial_buffer.extend(ser.read(ser.in_waiting))
-
-            # Processa todos os pacotes completos no buffer
-            while len(serial_buffer) >= TAMANHO_PACOTE_TOTAL:
-                idx = serial_buffer.find(TAG)
-                if idx == -1:
-                    # Não encontrou cabeçalho: limpa, preservando possível 'S' no fim
-                    if serial_buffer[-1] == ord('S'):
-                        serial_buffer = bytearray([ord('S')])
-                    else:
-                        serial_buffer.clear()
-                    break
-
-                if idx + TAMANHO_PACOTE_TOTAL <= len(serial_buffer):
-                    pacote_dados = serial_buffer[idx+2 : idx+8]
-                    try:
-                        v, b, s = struct.unpack(PACOTE, pacote_dados)
-                        contador_de_eventos += 1
-                        # Tempo real = contador / taxa de envio
-                        tempo_real = contador_de_eventos / TAXA_ENVIO
-
-                        tempo_data.append(tempo_real)
-                        tensao_data.append(v)
-                        if b:
-                            blackout_events.append((tempo_real, v))
-                        dados_novos = True
-                    except struct.error:
-                        pass
-                    # Remove o pacote processado do buffer
-                    serial_buffer = serial_buffer[idx + TAMANHO_PACOTE_TOTAL:]
+        while len(serial_buffer) >= TAMANHO_PACOTE_TOTAL:
+            idx = serial_buffer.find(TAG)
+            if idx == -1:
+                if serial_buffer[-1] == ord('S'):
+                    serial_buffer = bytearray([ord('S')])
                 else:
-                    # Se pacote incompleto, aguarda mais dados
-                    serial_buffer = serial_buffer[idx:]
-                    break
+                    serial_buffer.clear()
+                break
 
-    ###############################                
-    ##### ATUALIZAÇÃO DO GRÁFICO ##
-    ############################### 
+            if idx + TAMANHO_PACOTE_TOTAL <= len(serial_buffer):
+                pacote_dados = serial_buffer[idx+2 : idx+8]
+                try:
+                    v, b, s = struct.unpack(PACOTE, pacote_dados)
+                    # Guarda a tensão junto com o estado de blackout e surto
+                    historico_dados.append((v, b, s))
+                    dados_novos = True
+                except struct.error:
+                    pass
+                serial_buffer = serial_buffer[idx + TAMANHO_PACOTE_TOTAL:]
+            else:
+                serial_buffer = serial_buffer[idx:]
+                break
 
-    if dados_novos and tempo_data:
-        # Define a janela deslizante baseada no último tempo
-        limite_esquerdo = tempo_data[-1] - JANELA_SEGUNDOS
-
-        # Remove dados fora da janela
-        while tempo_data and tempo_data[0] < limite_esquerdo:
-            tempo_data.popleft()
-            tensao_data.popleft()
-        while blackout_events and blackout_events[0][0] < limite_esquerdo:
-            blackout_events.popleft()
-
-        # Atualiza a linha da tensão
-        line1.set_data(list(tempo_data), list(tensao_data))
-
-        # Atualiza os pontos de blackout
-        if blackout_events:
-            tempos, valores = zip(*blackout_events)
-            scat_blackout.set_data(tempos, valores)
+    ###############################################
+    ######### ALGORITMO DE TRIGGER (GATILHO) ######
+    ###############################################
+    if dados_novos and len(historico_dados) >= PONTOS_TELA:
+        lista_dados = list(historico_dados)
+        idx_trigger = -1
+        
+        # Procura o ponto onde a onda cruza o zero subindo (baseado no valor de tensão d[0])
+        for i in range(len(lista_dados) - PONTOS_TELA - 1, 0, -1):
+            if lista_dados[i][0] <= 0 and lista_dados[i+1][0] > 0:
+                idx_trigger = i
+                break
+        
+        # Recorta a janela sincronizada pelo trigger
+        if idx_trigger != -1:
+            janela = lista_dados[idx_trigger : idx_trigger + PONTOS_TELA]
         else:
-            scat_blackout.set_data([], [])
+            janela = lista_dados[-PONTOS_TELA:]
 
-        # Ajusta os limites do eixo X
-        ax1.set_xlim(limite_esquerdo, limite_esquerdo + JANELA_SEGUNDOS)
+        # Separa os vetores de tensão e blackout da janela recortada
+        tensao_janela = [d[0] for d in janela]
+        blackout_janela = [d[1] for d in janela]
+        
+        # Base de tempo estática local de 0 a 0.1 segundos
+        tempos_janela = [i / TAXA_ENVIO for i in range(len(tensao_janela))]
+        
+        # 1. Atualiza o traçado da curva senoidal
+        line1.set_data(tempos_janela, tensao_janela)
+
+        # 2. Filtra e extrai apenas as coordenadas onde ocorreu Blackout (b == 1)
+        tempos_blackout = []
+        valores_blackout = []
+        for i in range(len(janela)):
+            if blackout_janela[i] == 1:
+                tempos_blackout.append(tempos_janela[i])
+                valores_blackout.append(tensao_janela[i])
+        
+        # Atualiza a marcação dos "X" vermelhos no gráfico
+        scat_blackout.set_data(tempos_blackout, valores_blackout)
 
     return line1, scat_blackout
 
-# Cria a animação (atualização a cada 30 ms)
-ani = FuncAnimation(fig, update, interval=30, blit=False)
+# Adicionado scat_blackout no retorno para o blit=True atualizar ambos os elementos de forma veloz
+ani = FuncAnimation(fig, update, interval=30, blit=True)
 plt.tight_layout()
 plt.show()
