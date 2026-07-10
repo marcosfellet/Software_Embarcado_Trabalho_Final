@@ -17,11 +17,11 @@ void uart_init()
 {
     // 1. Configuração dos parâmetros de comunicação
     uart_config_t uart_config = {
-        .baud_rate = 921600,                  // Velocidade sincronizada com o Python
-        .data_bits = UART_DATA_8_BITS,        // Tamanho do pacote de dados enviado
-        .parity = UART_PARITY_DISABLE,        // Sem bit de paridade
-        .stop_bits = UART_STOP_BITS_1,        // 1 bit de parada
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE // Desativa controle de fluxo
+        .baud_rate = 921600,                  // Alterado de 115200 para 921600
+        .data_bits = UART_DATA_8_BITS,        
+        .parity = UART_PARITY_DISABLE,        
+        .stop_bits = UART_STOP_BITS_1,        
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE 
     };
 
     // Aplica as configurações na porta
